@@ -1,0 +1,12 @@
+flask
+fastapi
+uvicorn
+openai
+sentence-transformers
+faiss-cpu
+numpy
+pandas
+requests
+pytesseract
+pillow
+opencv-python

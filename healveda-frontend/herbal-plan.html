@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Heal Veda | Herbal Plan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gradient-to-br from-green-50 to-emerald-100 min-h-screen">
+
+<!-- NAVBAR -->
+<nav class="bg-white shadow">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    <h1 class="text-xl font-bold text-green-700">🌿 Heal Veda</h1>
+    <div class="space-x-4 text-sm">
+      <a href="/" class="hover:text-green-600">Home</a>
+      <a href="/safety" class="hover:text-green-600">Safety Check</a>
+      <a href="/herbal-plan" class="font-semibold text-green-700">Herbal Plan</a>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="max-w-4xl mx-auto p-6 mt-6">
+
+  <h2 class="text-3xl font-bold text-green-700 mb-2">
+    🌱 Personalized Herbal Plan
+  </h2>
+  <p class="text-gray-600 mb-6">
+    AI-powered Ayurvedic wellness plan based on your body type & lifestyle
+  </p>
+
+  <!-- FORM CARD -->
+  <div class="bg-white p-6 rounded-xl shadow-lg grid md:grid-cols-2 gap-4">
+
+    <select id="prakriti" class="border p-3 rounded">
+      <option value="">Select Prakriti</option>
+      <option>Vata</option>
+      <option>Pitta</option>
+      <option>Kapha</option>
+    </select>
+
+    <select id="goal" class="border p-3 rounded">
+      <option value="">Wellness Goal</option>
+      <option>Digestion</option>
+      <option>Immunity</option>
+      <option>Stress Relief</option>
+      <option>Sleep Improvement</option>
+      <option>Energy Boost</option>
+    </select>
+
+    <select id="lifestyle" class="border p-3 rounded">
+      <option value="">Lifestyle</option>
+      <option>Sedentary</option>
+      <option>Moderately Active</option>
+      <option>Highly Active</option>
+    </select>
+
+    <input
+      id="medicines"
+      class="border p-3 rounded"
+      placeholder="Current medicines (optional)" />
+
+    <button
+      onclick="generateHerbalPlan()"
+      class="md:col-span-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold">
+      🌿 Generate Herbal Plan
+    </button>
+
+  </div>
+
+  <!-- RESULT -->
+  <div id="result" class="mt-8 hidden bg-white p-6 rounded-xl shadow-lg"></div>
+
+</div>
+
+<script src="/js/herbal-plan.js"></script>
+</body>
+</html>
