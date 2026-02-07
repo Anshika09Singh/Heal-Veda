@@ -65,3 +65,27 @@ gap between complex medical information and everyday understanding.
 
 ## 🧠 System Architecture
 
+Frontend (HTML + Tailwind + JS)
+↓
+Flask Backend (Python APIs)
+↓
+OCR (EasyOCR) + Rule Engine
+↓
+Generative AI (Gemini)
+↓
+Simple Text + Voice Output
+
+
+
+---
+
+## ⚙️ How to Run Locally
+
+1. Clone the repository
+2. Create and activate virtual environment
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate
+
+
+
