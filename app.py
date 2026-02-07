@@ -60,6 +60,8 @@ def store_in_vector_db(text, source):
         ids=[f"{source}_{datetime.now().timestamp()}"]
     )
 
+    print(f"✅ Stored in Vector DB | Source: {source}")
+
 # =============================
 # FRONTEND ROUTES
 # =============================
@@ -114,14 +116,13 @@ TIMING_RULES = {
 }
 
 # =============================
-# MEDICINE SCANNER (OCR → LOGIC → AI → VECTOR DB)
+# MEDICINE SCANNER
 # =============================
 @app.route("/scan-medicines", methods=["POST"])
 def scan_medicines():
     try:
         extracted_text = ""
 
-        # OCR STEP
         if "image" in request.files:
             image = request.files["image"]
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
@@ -132,7 +133,6 @@ def scan_medicines():
 
         print("📄 OCR TEXT:", extracted_text)
 
-        # MEDICINE DETECTION (ROBUST)
         medicines = set()
         words = extracted_text.replace(",", " ").replace(")", " ").split()
 
@@ -142,43 +142,30 @@ def scan_medicines():
                 if name.isalpha() and len(name) > 3:
                     medicines.add(name.capitalize())
 
-        # ALSO MATCH KNOWN MEDICINES
         for key in TIMING_RULES:
             if key in extracted_text:
                 medicines.add(key.capitalize())
 
         medicines = list(medicines)
 
-        # FALLBACK (NEVER FAIL UI)
         if not medicines:
             return jsonify({
                 "medicines": [],
                 "timingAdvice": [],
                 "riskScore": 50,
                 "riskLevel": "Unknown",
-                "alerts": [
-                    "Medicine names could not be identified clearly.",
-                    "Try a clearer image or typed input."
-                ],
-                "aiExplanation": "The prescription text was unclear."
+                "alerts": ["Medicine names unclear"],
+                "aiExplanation": "Please upload a clearer prescription image."
             })
 
-        # TIMING ADVICE
-        timing = []
-        for med in medicines:
-            key = med.lower()
-            timing.append({
-                "medicine": med,
-                "advice": TIMING_RULES.get(
-                    key,
-                    "Follow doctor's instructions for timing"
-                )
-            })
+        timing = [{
+            "medicine": m,
+            "advice": TIMING_RULES.get(m.lower(), "Follow doctor's instructions")
+        } for m in medicines]
 
-        # AI EXPLANATION
         prompt = f"""
-Explain the following medicines in very simple language
-for a common person. No diagnosis, no dosage.
+Explain the following medicines in very simple language.
+No diagnosis. No dosage.
 
 Medicines:
 {", ".join(medicines)}
@@ -191,9 +178,8 @@ Medicines:
 
         ai_text = response.candidates[0].content.parts[0].text
 
-        # STORE IN VECTOR DB
         store_in_vector_db(
-            f"SCANNER | Medicines: {medicines} | OCR: {extracted_text} | AI: {ai_text}",
+            f"SCANNER | Medicines: {medicines} | AI: {ai_text}",
             source="scanner"
         )
 
@@ -202,16 +188,15 @@ Medicines:
             "timingAdvice": timing,
             "riskScore": 80,
             "riskLevel": "Informational",
-            "alerts": ["Always follow your doctor's advice."],
+            "alerts": ["Always follow your doctor’s advice"],
             "aiExplanation": ai_text
         })
 
     except Exception as e:
-        print("🔥 SCANNER ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
 # =============================
-# SAFETY CHECK (VECTOR DB)
+# SAFETY CHECK (SYSTEMATIC)
 # =============================
 @app.route("/check", methods=["POST"])
 def check():
@@ -223,12 +208,42 @@ def check():
     symptoms = data.get("symptoms", [])
 
     prompt = f"""
-Medicine: {medicine}
-Herb: {herb}
-Body Type: {prakriti}
-Symptoms: {symptoms}
+You are a wellness safety assistant.
+Explain everything for a common person.
 
-Explain safety in very simple language.
+User details:
+- Medicine: {medicine}
+- Herb: {herb}
+- Body type: {prakriti}
+- Symptoms: {", ".join(symptoms)}
+
+IMPORTANT RULES:
+- No diagnosis
+- No dosage
+- No scary words
+- Simple English
+- Bullet points only
+
+FORMAT STRICTLY LIKE THIS:
+
+SAFETY RESULT:
+Risk Level: Low / Moderate / High
+Meaning: One simple line
+
+WHY THIS NEEDS ATTENTION:
+• Point 1
+• Point 2
+
+WHAT YOU SHOULD DO:
+• Action 1
+• Action 2
+
+WHAT TO AVOID:
+• Avoid 1
+• Avoid 2
+
+FINAL ADVICE:
+2 friendly reassuring lines.
 """
 
     response = client.models.generate_content(
@@ -246,7 +261,7 @@ Explain safety in very simple language.
     return jsonify({"response": ai_text})
 
 # =============================
-# HERBAL PLAN (VECTOR DB)
+# HERBAL PLAN (SYSTEMATIC)
 # =============================
 @app.route("/generate-herbal-plan", methods=["POST"])
 def generate_herbal_plan():
@@ -258,12 +273,51 @@ def generate_herbal_plan():
     medicines = data.get("medicines", "")
 
     prompt = f"""
-Body Type: {prakriti}
-Goal: {goal}
-Lifestyle: {lifestyle}
-Current Medicines: {medicines}
+You are a wellness assistant.
+Explain everything so a normal person can understand.
 
-Generate a simple herbal wellness plan.
+User details:
+- Body type: {prakriti}
+- Goal: {goal}
+- Lifestyle: {lifestyle}
+- Current medicines: {medicines}
+
+IMPORTANT RULES:
+- No diagnosis
+- No dosage
+- No Ayurveda jargon
+- Simple English
+
+FORMAT STRICTLY LIKE THIS:
+
+RECOMMENDED HERBS:
+1. Herb name
+• What it does:
+• Why it is suggested for me:
+• How to use (form only):
+• Safety note:
+
+2. Herb name
+• What it does:
+• Why it is suggested for me:
+• How to use:
+• Safety note:
+
+DAILY LIFESTYLE GUIDANCE:
+Morning:
+• Point
+
+Daytime:
+• Point
+
+Evening:
+• Point
+
+IMPORTANT SAFETY NOTE:
+2 simple lines.
+
+SHORT SUMMARY:
+2 reassuring lines.
 """
 
     response = client.models.generate_content(
@@ -279,6 +333,13 @@ Generate a simple herbal wellness plan.
     )
 
     return jsonify({"response": ai_text})
+
+# =============================
+# VECTOR COUNT (DEBUG)
+# =============================
+@app.route("/vector-count")
+def vector_count():
+    return jsonify({"total_vectors": vector_collection.count()})
 
 # =============================
 # HEALTH CHECK
