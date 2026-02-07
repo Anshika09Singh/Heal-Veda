@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Heal Veda | Medicine Safety Scanner</title>
+  <meta charset="UTF-8" />
+  <title>Heal Veda | Medicine Scanner</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
@@ -12,11 +12,7 @@
 <nav class="bg-white shadow">
   <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
     <h1 class="text-xl font-bold text-green-700">🌿 Heal Veda</h1>
-    <div class="space-x-4 text-sm">
-      <a href="/" class="hover:text-green-600">Home</a>
-      <a href="/scanner" class="font-semibold text-green-700">Medicine Scanner</a>
-      <a href="/safety" class="hover:text-green-600">Safety Check</a>
-    </div>
+    <a href="/" class="text-sm hover:text-green-600">Home</a>
   </div>
 </nav>
 
@@ -24,111 +20,55 @@
 <div class="max-w-4xl mx-auto p-6 mt-6">
 
   <h2 class="text-3xl font-bold text-orange-700 mb-2">
-    💊 Medicine Safety Scanner
+    📸 Prescription Scanner
   </h2>
   <p class="text-gray-600 mb-6">
-    Scan, understand, and use medicines safely
+    Upload a photo of your prescription. We explain it in simple language.
   </p>
 
-  <!-- INPUT CARD -->
+  <!-- UPLOAD CARD -->
   <div class="bg-white p-6 rounded-xl shadow-lg space-y-4">
 
-    <!-- MANUAL ENTRY -->
     <div>
       <label class="font-semibold text-gray-700">
-        📝 Enter Medicine Names
+        Upload Prescription / Medicine Image
       </label>
       <input
-        id="manualMedicines"
-        class="w-full border p-3 rounded mt-1"
-        placeholder="Eg: Levothyroxine, Pantoprazole, Paracetamol">
+        type="file"
+        id="imageInput"
+        accept="image/*"
+        class="w-full mt-2 border p-2 rounded"
+      />
     </div>
 
-    <!-- PRESCRIPTION TEXT -->
-    <div>
-      <label class="font-semibold text-gray-700">
-        📄 Paste Prescription Text
-      </label>
-      <textarea
-        id="prescriptionText"
-        rows="4"
-        class="w-full border p-3 rounded mt-1"
-        placeholder="Eg: Tab Levothyroxine 50mcg, Tab Pantoprazole">
-      </textarea>
-    </div>
-
-    <!-- IMAGE UPLOAD -->
-    <div>
-      <label class="font-semibold text-gray-700">
-        📸 Upload Medicine Image (Optional)
-      </label>
-      <input type="file" class="w-full mt-1">
-    </div>
-
-    <!-- BUTTON -->
-    <button onclick="scanMedicines()"
-  class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-semibold">
-  🔍 Scan Medicines
-</button>
-
+    <button
+      type="button"
+      onclick="scanMedicines()"
+      class="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-semibold">
+      🔍 Scan Prescription
+    </button>
 
   </div>
 
-  <!-- OUTPUT AREA -->
-  <div class="mt-8 space-y-4">
+  <!-- RESULT -->
+  <div id="result" class="mt-8 space-y-4"></div>
 
-    <!-- SCORE -->
-    <div class="bg-white p-4 rounded shadow">
-      <h3 class="font-semibold text-orange-700">
-        📊 Medicine Safety Score
-      </h3>
-      <p class="text-xl font-bold text-yellow-600">
-        65 / 100 (Moderate Risk)
-      </p>
-    </div>
+  <!-- SPEAKER -->
+  <button
+    id="speakBtn"
+    onclick="speakResult()"
+    class="hidden mt-4 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg font-semibold">
+    🔊 Listen Explanation
+  </button>
 
-    <!-- TIMING -->
-    <div class="bg-white p-4 rounded shadow">
-      <h3 class="font-semibold text-orange-700">
-        ⏰ Timing & Spacing Advice
-      </h3>
-      <ul class="list-disc ml-6 text-gray-700">
-        <li>Levothyroxine: Morning, empty stomach</li>
-        <li>Pantoprazole: Before breakfast</li>
-      </ul>
-    </div>
-
-    <!-- ALERTS -->
-    <div class="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
-      <h3 class="font-semibold text-yellow-800">
-        ⚠️ Safety Alert
-      </h3>
-      <p class="text-yellow-700">
-        This combination may require spacing between doses.
-      </p>
-    </div>
-
-    <!-- EXPLANATION -->
-    <div class="bg-white p-4 rounded shadow">
-      <h3 class="font-semibold text-orange-700">
-        🧾 Prescription Understanding
-      </h3>
-      <p class="text-gray-700">
-        Levothyroxine supports thyroid hormone balance. Pantoprazole
-        reduces stomach acid and protects digestion.
-      </p>
-    </div>
-
-    <!-- NEXT STEP -->
-    <div class="text-sm text-gray-500">
-      👉 For detailed interaction analysis, use the Safety Check feature.
-    </div>
-
-  </div>
+  <!-- DISCLAIMER -->
+  <p class="mt-4 text-xs text-gray-500">
+    Disclaimer: This scanner provides AI-generated explanations for understanding prescriptions.
+    It does not replace medical advice. Always follow your doctor’s instructions.
+  </p>
 
 </div>
 
-</body>
 <script src="/js/scanner.js"></script>
-
+</body>
 </html>
