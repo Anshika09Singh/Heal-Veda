@@ -5,6 +5,7 @@ from google import genai
 import os
 import easyocr
 import tempfile
+import json
 
 # =============================
 # VECTOR DB IMPORTS
@@ -116,13 +117,14 @@ TIMING_RULES = {
 }
 
 # =============================
-# MEDICINE SCANNER
+# MEDICINE SCANNER (OCR → AI → VECTOR DB)
 # =============================
 @app.route("/scan-medicines", methods=["POST"])
 def scan_medicines():
     try:
         extracted_text = ""
 
+        # OCR
         if "image" in request.files:
             image = request.files["image"]
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
@@ -146,6 +148,46 @@ def scan_medicines():
             if key in extracted_text:
                 medicines.add(key.capitalize())
 
+        # 🔥 AI FALLBACK FOR HANDWRITTEN RX
+        if not medicines and extracted_text.strip():
+            prompt = f"""
+You are a medical text extractor.
+
+From the prescription text below, extract:
+- medicine_name
+- strength
+- dosage_instructions
+
+Return ONLY valid JSON in this format:
+{{
+  "medicine_name": "",
+  "strength": "",
+  "dosage_instructions": ""
+}}
+
+Prescription text:
+{extracted_text}
+"""
+
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=prompt
+            )
+
+            ai_raw = response.candidates[0].content.parts[0].text.strip()
+
+            try:
+                ai_data = json.loads(ai_raw)
+            except Exception:
+                ai_data = {}
+
+            med_name = ai_data.get("medicine_name", "").strip()
+            strength = ai_data.get("strength", "").strip()
+            dosage = ai_data.get("dosage_instructions", "").strip()
+
+            if med_name:
+                medicines.add(med_name.capitalize())
+
         medicines = list(medicines)
 
         if not medicines:
@@ -163,7 +205,7 @@ def scan_medicines():
             "advice": TIMING_RULES.get(m.lower(), "Follow doctor's instructions")
         } for m in medicines]
 
-        prompt = f"""
+        explanation_prompt = f"""
 Explain the following medicines in very simple language.
 No diagnosis. No dosage.
 
@@ -171,15 +213,13 @@ Medicines:
 {", ".join(medicines)}
 """
 
-        response = client.models.generate_content(
+        explanation = client.models.generate_content(
             model="gemini-3-flash-preview",
-            contents=prompt
-        )
-
-        ai_text = response.candidates[0].content.parts[0].text
+            contents=explanation_prompt
+        ).candidates[0].content.parts[0].text
 
         store_in_vector_db(
-            f"SCANNER | Medicines: {medicines} | AI: {ai_text}",
+            f"SCANNER | Medicines: {medicines} | OCR: {extracted_text} | AI: {explanation}",
             source="scanner"
         )
 
@@ -189,10 +229,11 @@ Medicines:
             "riskScore": 80,
             "riskLevel": "Informational",
             "alerts": ["Always follow your doctor’s advice"],
-            "aiExplanation": ai_text
+            "aiExplanation": explanation
         })
 
     except Exception as e:
+        print("🔥 SCANNER ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
 # =============================
@@ -202,48 +243,32 @@ Medicines:
 def check():
     data = request.get_json(force=True)
 
-    medicine = data.get("medicines", "")
-    herb = data.get("herbs", "")
-    prakriti = data.get("prakriti", "")
-    symptoms = data.get("symptoms", [])
-
     prompt = f"""
 You are a wellness safety assistant.
-Explain everything for a common person.
 
-User details:
-- Medicine: {medicine}
-- Herb: {herb}
-- Body type: {prakriti}
-- Symptoms: {", ".join(symptoms)}
+Medicine: {data.get("medicines")}
+Herb: {data.get("herbs")}
+Body Type: {data.get("prakriti")}
+Symptoms: {data.get("symptoms")}
 
-IMPORTANT RULES:
-- No diagnosis
-- No dosage
-- No scary words
-- Simple English
-- Bullet points only
-
-FORMAT STRICTLY LIKE THIS:
+FORMAT STRICTLY:
 
 SAFETY RESULT:
-Risk Level: Low / Moderate / High
-Meaning: One simple line
+Risk Level:
+Meaning:
 
 WHY THIS NEEDS ATTENTION:
-• Point 1
-• Point 2
+• Point
+• Point
 
 WHAT YOU SHOULD DO:
-• Action 1
-• Action 2
+• Point
 
 WHAT TO AVOID:
-• Avoid 1
-• Avoid 2
+• Point
 
 FINAL ADVICE:
-2 friendly reassuring lines.
+2 friendly lines.
 """
 
     response = client.models.generate_content(
@@ -253,10 +278,7 @@ FINAL ADVICE:
 
     ai_text = response.candidates[0].content.parts[0].text
 
-    store_in_vector_db(
-        f"SAFETY | {medicine} + {herb} | {prakriti} | {symptoms} | {ai_text}",
-        source="safety"
-    )
+    store_in_vector_db(ai_text, source="safety")
 
     return jsonify({"response": ai_text})
 
@@ -267,57 +289,19 @@ FINAL ADVICE:
 def generate_herbal_plan():
     data = request.get_json()
 
-    prakriti = data.get("prakriti", "")
-    goal = data.get("goal", "")
-    lifestyle = data.get("lifestyle", "")
-    medicines = data.get("medicines", "")
-
     prompt = f"""
-You are a wellness assistant.
-Explain everything so a normal person can understand.
+Generate a SIMPLE herbal wellness plan.
 
-User details:
-- Body type: {prakriti}
-- Goal: {goal}
-- Lifestyle: {lifestyle}
-- Current medicines: {medicines}
+Body Type: {data.get("prakriti")}
+Goal: {data.get("goal")}
+Lifestyle: {data.get("lifestyle")}
+Medicines: {data.get("medicines")}
 
-IMPORTANT RULES:
-- No diagnosis
-- No dosage
-- No Ayurveda jargon
-- Simple English
-
-FORMAT STRICTLY LIKE THIS:
-
-RECOMMENDED HERBS:
-1. Herb name
-• What it does:
-• Why it is suggested for me:
-• How to use (form only):
-• Safety note:
-
-2. Herb name
-• What it does:
-• Why it is suggested for me:
-• How to use:
-• Safety note:
-
-DAILY LIFESTYLE GUIDANCE:
-Morning:
-• Point
-
-Daytime:
-• Point
-
-Evening:
-• Point
-
-IMPORTANT SAFETY NOTE:
-2 simple lines.
-
-SHORT SUMMARY:
-2 reassuring lines.
+FORMAT:
+RECOMMENDED HERBS
+DAILY LIFESTYLE
+SAFETY NOTE
+SHORT SUMMARY
 """
 
     response = client.models.generate_content(
@@ -327,15 +311,12 @@ SHORT SUMMARY:
 
     ai_text = response.candidates[0].content.parts[0].text
 
-    store_in_vector_db(
-        f"HERBAL_PLAN | {prakriti} | {goal} | {lifestyle} | {ai_text}",
-        source="herbal_plan"
-    )
+    store_in_vector_db(ai_text, source="herbal_plan")
 
     return jsonify({"response": ai_text})
 
 # =============================
-# VECTOR COUNT (DEBUG)
+# VECTOR COUNT (VERIFY STORAGE)
 # =============================
 @app.route("/vector-count")
 def vector_count():
