@@ -6,33 +6,63 @@ import os
 import easyocr
 import tempfile
 
+# =============================
+# VECTOR DB IMPORTS
+# =============================
+import chromadb
+from sentence_transformers import SentenceTransformer
+from datetime import datetime
+
 load_dotenv()
 
-# -----------------------------
-# Flask setup
-# -----------------------------
+# =============================
+# FLASK SETUP
+# =============================
 app = Flask(__name__)
 CORS(app)
 
-# -----------------------------
-# Paths
-# -----------------------------
+# =============================
+# PATHS
+# =============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "healveda-frontend")
 
-# -----------------------------
-# Gemini setup
-# -----------------------------
+# =============================
+# GEMINI SETUP
+# =============================
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# -----------------------------
-# OCR setup
-# -----------------------------
+# =============================
+# OCR SETUP
+# =============================
 ocr_reader = easyocr.Reader(['en'], gpu=False)
 
-# -----------------------------
+# =============================
+# VECTOR DATABASE (SEMANTIC MEMORY)
+# =============================
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+chroma_client = chromadb.Client()
+
+vector_collection = chroma_client.get_or_create_collection(
+    name="healveda_semantic_memory"
+)
+
+def store_in_vector_db(text, source):
+    if not text.strip():
+        return
+
+    embedding = embedding_model.encode(text).tolist()
+
+    vector_collection.add(
+        documents=[text],
+        embeddings=[embedding],
+        metadatas=[{"source": source}],
+        ids=[f"{source}_{datetime.now().timestamp()}"]
+    )
+
+# =============================
 # FRONTEND ROUTES
-# -----------------------------
+# =============================
 @app.route("/")
 def home():
     return send_from_directory(FRONTEND_DIR, "index.html")
@@ -69,9 +99,9 @@ def chatbot():
 def serve_js(filename):
     return send_from_directory(os.path.join(FRONTEND_DIR, "js"), filename)
 
-# -----------------------------
-# MEDICINE KNOWLEDGE (LIMITED)
-# -----------------------------
+# =============================
+# MEDICINE KNOWLEDGE
+# =============================
 TIMING_RULES = {
     "levothyroxine": "Take in the morning on an empty stomach",
     "thyroxine": "Take in the morning on an empty stomach",
@@ -83,27 +113,26 @@ TIMING_RULES = {
     "amlodipine": "Take at the same time daily"
 }
 
-# -----------------------------
-# MEDICINE SCANNER (FIXED)
-# -----------------------------
+# =============================
+# MEDICINE SCANNER (OCR → LOGIC → AI → VECTOR DB)
+# =============================
 @app.route("/scan-medicines", methods=["POST"])
 def scan_medicines():
     try:
         extracted_text = ""
 
-        # OCR
+        # OCR STEP
         if "image" in request.files:
             image = request.files["image"]
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                 image.save(tmp.name)
-                ocr_text = " ".join(ocr_reader.readtext(tmp.name, detail=0))
-                extracted_text = ocr_text.lower()
+                extracted_text = " ".join(
+                    ocr_reader.readtext(tmp.name, detail=0)
+                ).lower()
 
         print("📄 OCR TEXT:", extracted_text)
 
-        # -----------------------------
-        # Detect medicine-like names
-        # -----------------------------
+        # MEDICINE DETECTION (ROBUST)
         medicines = set()
         words = extracted_text.replace(",", " ").replace(")", " ").split()
 
@@ -113,28 +142,14 @@ def scan_medicines():
                 if name.isalpha() and len(name) > 3:
                     medicines.add(name.capitalize())
 
+        # ALSO MATCH KNOWN MEDICINES
+        for key in TIMING_RULES:
+            if key in extracted_text:
+                medicines.add(key.capitalize())
+
         medicines = list(medicines)
 
-        # -----------------------------
-        # Timing advice
-        # -----------------------------
-        timing = []
-        for med in medicines:
-            key = med.lower()
-            if key in TIMING_RULES:
-                timing.append({
-                    "medicine": med,
-                    "advice": TIMING_RULES[key]
-                })
-            else:
-                timing.append({
-                    "medicine": med,
-                    "advice": "Follow doctor's instructions (timing not clearly specified)"
-                })
-
-        # -----------------------------
-        # Fallback (never fail)
-        # -----------------------------
+        # FALLBACK (NEVER FAIL UI)
         if not medicines:
             return jsonify({
                 "medicines": [],
@@ -142,27 +157,31 @@ def scan_medicines():
                 "riskScore": 50,
                 "riskLevel": "Unknown",
                 "alerts": [
-                    "Medicine name could not be clearly identified.",
-                    "Please upload a clearer image or type the medicine name manually."
+                    "Medicine names could not be identified clearly.",
+                    "Try a clearer image or typed input."
                 ],
-                "aiExplanation": (
-                    "The prescription text was unclear. "
-                    "This can happen due to handwriting, image quality, or brand names."
+                "aiExplanation": "The prescription text was unclear."
+            })
+
+        # TIMING ADVICE
+        timing = []
+        for med in medicines:
+            key = med.lower()
+            timing.append({
+                "medicine": med,
+                "advice": TIMING_RULES.get(
+                    key,
+                    "Follow doctor's instructions for timing"
                 )
             })
 
-        # -----------------------------
-        # AI explanation
-        # -----------------------------
+        # AI EXPLANATION
         prompt = f"""
-Explain the following medicines in very simple language for a common person:
+Explain the following medicines in very simple language
+for a common person. No diagnosis, no dosage.
 
+Medicines:
 {", ".join(medicines)}
-
-Rules:
-- No diagnosis
-- No dosage
-- Simple explanation only
 """
 
         response = client.models.generate_content(
@@ -170,34 +189,106 @@ Rules:
             contents=prompt
         )
 
-        ai_text = "Explanation unavailable."
-        if response and response.candidates:
-            parts = response.candidates[0].content.parts
-            if parts:
-                ai_text = parts[0].text
+        ai_text = response.candidates[0].content.parts[0].text
+
+        # STORE IN VECTOR DB
+        store_in_vector_db(
+            f"SCANNER | Medicines: {medicines} | OCR: {extracted_text} | AI: {ai_text}",
+            source="scanner"
+        )
 
         return jsonify({
             "medicines": medicines,
             "timingAdvice": timing,
             "riskScore": 80,
             "riskLevel": "Informational",
-            "alerts": ["Always follow your doctor's instructions."],
+            "alerts": ["Always follow your doctor's advice."],
             "aiExplanation": ai_text
         })
 
     except Exception as e:
-        print("🔥 SCANNER ERROR:", str(e))
+        print("🔥 SCANNER ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-# -----------------------------
+# =============================
+# SAFETY CHECK (VECTOR DB)
+# =============================
+@app.route("/check", methods=["POST"])
+def check():
+    data = request.get_json(force=True)
+
+    medicine = data.get("medicines", "")
+    herb = data.get("herbs", "")
+    prakriti = data.get("prakriti", "")
+    symptoms = data.get("symptoms", [])
+
+    prompt = f"""
+Medicine: {medicine}
+Herb: {herb}
+Body Type: {prakriti}
+Symptoms: {symptoms}
+
+Explain safety in very simple language.
+"""
+
+    response = client.models.generate_content(
+        model="gemini-3-flash-preview",
+        contents=prompt
+    )
+
+    ai_text = response.candidates[0].content.parts[0].text
+
+    store_in_vector_db(
+        f"SAFETY | {medicine} + {herb} | {prakriti} | {symptoms} | {ai_text}",
+        source="safety"
+    )
+
+    return jsonify({"response": ai_text})
+
+# =============================
+# HERBAL PLAN (VECTOR DB)
+# =============================
+@app.route("/generate-herbal-plan", methods=["POST"])
+def generate_herbal_plan():
+    data = request.get_json()
+
+    prakriti = data.get("prakriti", "")
+    goal = data.get("goal", "")
+    lifestyle = data.get("lifestyle", "")
+    medicines = data.get("medicines", "")
+
+    prompt = f"""
+Body Type: {prakriti}
+Goal: {goal}
+Lifestyle: {lifestyle}
+Current Medicines: {medicines}
+
+Generate a simple herbal wellness plan.
+"""
+
+    response = client.models.generate_content(
+        model="gemini-3-flash-preview",
+        contents=prompt
+    )
+
+    ai_text = response.candidates[0].content.parts[0].text
+
+    store_in_vector_db(
+        f"HERBAL_PLAN | {prakriti} | {goal} | {lifestyle} | {ai_text}",
+        source="herbal_plan"
+    )
+
+    return jsonify({"response": ai_text})
+
+# =============================
 # HEALTH CHECK
-# -----------------------------
+# =============================
 @app.route("/ping")
 def ping():
     return "Heal Veda backend running ✅"
 
-# -----------------------------
+# =============================
 # RUN SERVER
-# -----------------------------
+# =============================
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, port=5000)
