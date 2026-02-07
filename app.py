@@ -82,7 +82,7 @@ def herbal_plan():
     return send_from_directory(FRONTEND_DIR, "herbal-plan.html")
 
 @app.route("/about")
-def herbal_plan():
+def about():
     return send_from_directory(FRONTEND_DIR, "about.html")
 
 @app.route("/js/<path:filename>")
