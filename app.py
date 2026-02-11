@@ -6,40 +6,28 @@ import os
 import easyocr
 import tempfile
 
-# =============================
-# VECTOR DB IMPORTS
-# =============================
+
 import chromadb
 from sentence_transformers import SentenceTransformer
 from datetime import datetime
 
 load_dotenv()
 
-# =============================
-# FLASK SETUP
-# =============================
+
 app = Flask(__name__)
 CORS(app)
 
-# =============================
-# PATHS
-# =============================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "healveda-frontend")
 
-# =============================
-# GEMINI SETUP
-# =============================
+
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# =============================
-# OCR SETUP
-# =============================
+
 ocr_reader = easyocr.Reader(['en'], gpu=False)
 
-# =============================
-# VECTOR DATABASE (SEMANTIC MEMORY)
-# =============================
+
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 chroma_client = chromadb.Client()
 
@@ -62,9 +50,7 @@ def store_in_vector_db(text, source):
 
     print(f"✅ Stored in Vector DB | Source: {source}")
 
-# =============================
-# FRONTEND ROUTES
-# =============================
+
 @app.route("/")
 def home():
     return send_from_directory(FRONTEND_DIR, "index.html")
@@ -89,9 +75,9 @@ def about():
 def serve_js(filename):
     return send_from_directory(os.path.join(FRONTEND_DIR, "js"), filename)
 
-# =============================
+
 # MEDICINE TIMING KNOWLEDGE
-# =============================
+
 TIMING_RULES = {
     "amoxicillin": "Take after food",
     "paracetamol": "Take after food if needed",
@@ -100,15 +86,15 @@ TIMING_RULES = {
     "metformin": "Take with meals"
 }
 
-# =============================
+
 # MEDICINE SCANNER (OCR → AI → VECTOR DB)
-# =============================
+
 @app.route("/scan-medicines", methods=["POST"])
 def scan_medicines():
     try:
         extracted_text = ""
 
-        # -------- OCR --------
+        #  OCR 
         if "image" in request.files:
             image = request.files["image"]
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
@@ -124,7 +110,7 @@ def scan_medicines():
 
         medicines = set()
 
-        # -------- AI MEDICINE EXTRACTION (NO HARDCODING) --------
+        #  AI MEDICINE EXTRACTION (NO HARDCODING) 
         if extracted_text.strip():
             prompt = f"""
 You are a medical text extractor.
@@ -150,7 +136,7 @@ Text:
 
         medicines = list(medicines)
 
-        # -------- SAFE FALLBACK --------
+        #  SAFE FALLBACK 
         if not medicines:
             return jsonify({
                 "medicines": [],
@@ -206,9 +192,7 @@ Medicine:
         print("🔥 SCANNER ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-# =============================
-# SAFETY CHECK (SYSTEMATIC)
-# =============================
+
 @app.route("/check", methods=["POST"])
 def check():
     data = request.get_json(force=True)
@@ -257,9 +241,7 @@ FINAL ADVICE:
 
     return jsonify({"response": ai_text})
 
-# =============================
-# HERBAL PLAN
-# =============================
+
 @app.route("/generate-herbal-plan", methods=["POST"])
 def generate_herbal_plan():
     data = request.get_json()
@@ -303,22 +285,16 @@ SHORT SUMMARY:
 
     return jsonify({"response": ai_text})
 
-# =============================
-# VECTOR DB DEBUG
-# =============================
+
 @app.route("/vector-count")
 def vector_count():
     return jsonify({"total_vectors": vector_collection.count()})
 
-# =============================
-# HEALTH CHECK
-# =============================
+
 @app.route("/ping")
 def ping():
     return "Heal Veda backend running ✅"
 
-# =============================
-# RUN SERVER
-# =============================
+
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, port=5000)
